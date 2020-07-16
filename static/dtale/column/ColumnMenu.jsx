@@ -14,6 +14,7 @@ import { exports as gu } from "../gridUtils";
 import menuFuncs from "../menu/dataViewerMenuUtils";
 import serverState from "../serverStateManagement";
 import ColumnMenuOption from "./ColumnMenuOption";
+import bu from "../backgroundUtils";
 
 const { ROW_HEIGHT, SORT_PROPS } = gu;
 const MOVE_COLS = [
@@ -91,7 +92,7 @@ class ReactColumnMenu extends React.Component {
       return null;
     }
     const colCfg = _.find(this.props.columns, { name: selectedCol }) || {};
-    const unlocked = _.get(colCfg, "locked", false) == false;
+    const unlocked = _.get(colCfg, "locked", false) === false;
     let currDir = _.find(this.props.sortInfo, ([col, _dir]) => selectedCol === col);
     currDir = _.isUndefined(currDir) ? SORT_PROPS[2].dir : currDir[1];
     const openPopup = (type, height = 450, width = 500) => () => {
@@ -160,7 +161,7 @@ class ReactColumnMenu extends React.Component {
         style={{ minWidth: "11em" }}
         ref={cm => (this._div = cm)}>
         {columnMenuOpen && <GlobalHotKeys keyMap={{ CLOSE_MENU: "esc" }} handlers={{ CLOSE_MENU: closeMenu }} />}
-        <header>{`Column "${selectedCol}"`}</header>
+        <header>{`Column "${selectedCol}"${colCfg.lowVariance ? ` ${bu.flagIcon}` : ""}`}</header>
         <ul>
           <li>
             <span className="toggler-action">

@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import requests
 import xarray as xr
+from scipy import stats
 from six import string_types
 
 import dtale.global_state as global_state
@@ -551,6 +552,15 @@ def dtype_formatter(data, dtypes, data_ranges, prev_dtypes=None):
 
         if classification == "S" and not dtype_data["hasMissing"]:
             dtype_data["hasMissing"] += int((s.str.strip() == "").sum())
+
+        # build variance flag
+        unique_ct = data[col].unique().size
+        check1 = (unique_ct / len(data[col])) < .1
+        check2 = False
+        if check1 and unique_ct >= 2:
+            val_counts = data[col].value_counts()
+            check2 = (val_counts.values[0] / val_counts.values[1]) > 20
+        dtype_data['lowVariance'] = bool(check1 and check2)
         return dtype_data
 
     return _formatter
@@ -1414,6 +1424,59 @@ def describe(data_id, column):
         uniq_code = "uniq_vals = data['{}'].value_counts().sort_values(ascending=False).head(100).index.values"
         code.append(uniq_code.format(column))
     return_data["code"] = "\n".join(code)
+    return jsonify(return_data)
+
+
+@dtale.route("/variance/<data_id>/<column>")
+@exception_decorator
+def variance(data_id, column):
+    """
+    :class:`flask:flask.Flask` route which returns standard details about column data using
+    :meth:`pandas:pandas.DataFrame.describe` to the front-end as JSON
+
+    :param data_id: integer string identifier for a D-Tale process's data
+    :type data_id: str
+    :param column: required dash separated string "START-END" stating a range of row indexes to be returned
+                   to the screen
+    :return: JSON {
+        describe: object representing output from :meth:`pandas:pandas.Series.describe`,
+        unique_data: array of unique values when data has <= 100 unique values
+        success: True/False
+    }
+
+    """
+    s = global_state.get_data(data_id)[column]
+    unique_ct = s.unique().size
+    s_size = len(s)
+    check1 = (unique_ct / s_size) < .1
+    return_data = dict(check1=dict(unique=unique_ct, size=s_size, result=check1))
+
+    if unique_ct >= 2:
+        val_counts = s.value_counts()
+        check2 = (val_counts.values[0] / val_counts.values[1]) > 20
+        return_data['check2'] = dict(
+            val1=dict(val=val_counts.index[0], ct=val_counts.values[0]),
+            val2=dict(val=val_counts.index[1], ct=val_counts.values[1]),
+            result=check2
+        )
+
+    curr_dtypes = global_state.get_dtypes(data_id)
+    dtype = next(
+        (
+            dtype_info
+            for dtype_info in curr_dtypes
+            if dtype_info["name"] == column
+        ),
+        None,
+    )
+    return_data['size'] = len(s)
+    return_data['outlierCt'] = dtype['hasOutliers']
+    return_data['missingCt'] = s.isnull().sum()
+
+    jb_test = stats.jarque_bera(s)
+    return_data['jarque_bera'] = dict(statistic=jb_test.statistic, pvalue=jb_test.pvalue)
+    sw_test = stats.shapiro(s)
+    return_data['shapiro_wilk'] = dict(statistic=sw_test.statistic, pvalue=sw_test.pvalue)
     return jsonify(return_data)
 
 
